@@ -1,16 +1,27 @@
 import json
 import os
 import time
+import nltk
+import matplotlib.pyplot as plt
+from nltk.tokenize import word_tokenize, sent_tokenize
+from nltk.corpus import stopwords
+from collections import Counter
 from api_key import API_KEY
 from openai import OpenAI
 from prompts import system_prompt_3
+nltk.download('stopwords')
+nltk.download('punkt_tab')
+
 
 # TODO
+# STOPWORDS ,#] ARE NOT BEING REMOVED
+# process human stories
+# investigate cases of pages = []
+
 # look at bad stories
 # look at asking the LLM to **improve** the story
 # provide rating scales for the AI (/7, /5 /10 etc.)
 # tweak rating criteria
-# nlp analysis of story corpus (word variety, average word length etc.)
 
 ''' 
 Unpacks an individual tandom story and returns a tuple: (story prompt, title, story, reading level).
@@ -78,20 +89,72 @@ def generate_user_prompt(story_data: tuple):
     '''
     return user_prompt
 
+
+
 # TODO: Progress bar
-def process_all_stories(dir: os.PathLike):
-    print(f'Processing all stories in {dir}')
+def tandem_corpus_statistics(dir: os.PathLike):
+    print(f'Processing all tandem stories in {dir}')
     start = time.time()
+
+    total_sentences = 0
+    total_words = 0
+    total_stories = 0
+    unique_word_ratio = 0
+    total_word_lengths = []
+    all_words = []
+
     for file in os.listdir(dir):
         print(file)
+
         # skip dev files
         if file[:3] == 'dev':
             continue
+
         unpacked_story = unpack_tandem_story(os.path.join(dir, file))
-        # only generate prompts on not None stories
+
+        # only perform operations on not None stories
         if unpacked_story:
-            user_prompt = generate_user_prompt(unpacked_story)
-    print(f'Completed in {time.time() - start}s')
+            story_prompt, title, story, reading_age = unpacked_story
+            if not story:
+                continue
+            total_stories += 1
+
+            # word and sentence tokenizer
+            words = word_tokenize(story)
+            sentences = sent_tokenize(story)
+            tokenized_words = [word for word in words if word not in stopwords.words('english')]
+
+            # corpus statistic counters
+            total_words += len(words)
+            total_sentences += len(sentences)
+            total_word_lengths += [len(word) for word in tokenized_words]
+            all_words += tokenized_words
+
+            # ratio of unique:non-unique words
+            unique_word_ratio += len(set(tokenized_words)) / len(tokenized_words)
+
+        if total_stories == 60:
+            break
+
+    print(f"Average number of words: {total_words / total_stories}")
+    print(f"Average number of sentences: {total_sentences / total_stories}")
+    print(f"Average word length: {sum(total_word_lengths) / len(total_word_lengths)}")
+    print(f"Total words: {len(all_words)}")
+    print(f"Total unique words: {len(set(all_words))}")
+    print(f"Average ratio of unique:non-unique words per story: {unique_word_ratio / total_stories}")
+    print(f'Completed in {round(time.time(), 2) - start} seconds')
+    plot_word_distribution(all_words)
+
+
+def plot_word_distribution(words, n=50):
+    word_distribution = Counter(words).most_common(n)
+    plt.bar(range(n), [w for f, w in word_distribution], align='center')
+    plt.xticks(range(n), [f for f, w in word_distribution], rotation=90)
+    plt.ylabel("Number of occurences")
+    plt.xlabel("Word")
+    plt.title(f"Top {n} most frequently occuring words in corpus")
+    plt.show()
+
 
 
 ''' make a call to the gpt api '''
@@ -108,14 +171,14 @@ def make_gpt_api_call(system_prompt: str, user_prompt: str, model='gpt-4o'):
 
 
 if __name__ == '__main__':
-    process_all_stories('data/Tandem_Data')
+    tandem_corpus_statistics('data/Tandem_Data')
 
     ivo_path = 'data\\Tandem_Data\\0a9c05f0-d630-403b-a257-7a7e67452c24.json'
     astronaut_path = 'data\\Tandem_Data\\0a774cd2-ee78-4861-a33e-1a9c2f3cfed4 (1).json'
 
     astronaut_story = unpack_tandem_story(astronaut_path)
     user_prompt = generate_user_prompt(astronaut_story)
-    print(user_prompt)
+    # print(user_prompt)
 
     # gpt_response = make_gpt_api_call(system_prompt_3, user_prompt)
     # print(gpt_response)
