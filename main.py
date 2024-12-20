@@ -8,6 +8,7 @@ from nltk.corpus import stopwords
 from collections import Counter
 from api_key import API_KEY
 from openai import OpenAI
+from tqdm import tqdm
 from prompts import system_prompt_3
 nltk.download('stopwords')
 nltk.download('punkt_tab')
@@ -15,12 +16,15 @@ nltk.download('punkt_tab')
 
 # TODO
 # investigate cases of tandem pages = []
-# return 4 Nones on upack stories?
+# BIN STATISTICS BY AGE for tandem data
+# remove all_words calculations
 
+# investigate Direct Preference Optimisation (DPO) and OPPO
+# get ages for human stories (by prompting a separate LLM or web scraping)
 # lemmatise and stem words for distribution?
 # look at bad stories
 # look at asking the LLM to **improve** the story
-# provide rating scales for the AI (/7, /5 /10 etc.)
+# provide textual rating scales for the AI: /7, /5 /10 becomes Likert (agree, disagree, ...)
 # tweak rating criteria
 
 ''' 
@@ -34,7 +38,7 @@ def unpack_story(path: os.PathLike):
     # unpack human story (no prompt, title, or reading level available)
     if 'pages' in data and data['pages']:
         story = ' '.join(line['text'] for line in data['pages'])
-        return None, None, story, None
+        return "human story", "title", story, "reading age"
 
     # unpack llm story
     # separate out the story prompt if it exists
@@ -76,7 +80,7 @@ def unpack_story(path: os.PathLike):
     # no story case
     else:
         return None
-
+    
     return story_prompt, title, story, reading_level
 
 
@@ -90,10 +94,12 @@ def calculate_corpus_statistics(dir: os.PathLike):
     total_stories = 0
     unique_word_ratio = 0
     total_word_lengths = []
+    total_sentence_lengths = []
     all_words = []
 
-    for file in os.listdir(dir):
-        print(file)
+    files = os.listdir(dir)
+    for file in tqdm(files, desc="Processing stories"):
+        #print(file)
 
         # skip dev files
         if file[:3] == 'dev':
@@ -101,38 +107,42 @@ def calculate_corpus_statistics(dir: os.PathLike):
 
         unpacked_story = unpack_story(os.path.join(dir, file))
 
-        # only perform operations on not None stories
-        if unpacked_story:
-            story_prompt, title, story, reading_age = unpacked_story
-            # skip null stories
-            if not story:
-                continue
-            total_stories += 1
+        # only process non None stories
+        if not unpacked_story:
+            continue
 
-            # word and sentence tokenizer
-            words = word_tokenize(story)
-            sentences = sent_tokenize(story)
+        story_prompt, title, story, reading_age = unpacked_story
 
-            # tokenized words with stopwords and punctuation removed
-            tokenized_words = [word.lower() for word in words if word.isalpha() and word.lower() not in stopwords.words("english")]
+        # skip null stories
+        if not story:
+            continue
 
-            # corpus statistic counters
-            total_words += len(words)
-            total_sentences += len(sentences)
-            total_word_lengths += [len(word) for word in tokenized_words]
-            all_words += tokenized_words
+        # word and sentence tokenizer
+        words = word_tokenize(story)
+        sentences = sent_tokenize(story)
 
-            # ratio of unique:non-unique words
-            unique_word_ratio += len(set(tokenized_words)) / len(tokenized_words)
+        # tokenized words with punctuation removed
+        tokenized_words = [word.lower() for word in words if word.isalpha()]
 
+        # corpus statistic counters
+        total_stories += 1
+        total_words += len(tokenized_words)
+        total_sentences += len(sentences)
+        total_word_lengths += [len(word) for word in tokenized_words]
+        total_sentence_lengths += [len(sentence.split()) for sentence in sentences]
+        all_words += tokenized_words
+
+        # ratio of unique:non-unique words
+        unique_word_ratio += len(set(tokenized_words)) / len(tokenized_words)
+
+    print(f"Total stories: {total_stories}")
     print(f"Average number of words: {round(total_words / total_stories, 2)}")
     print(f"Average number of sentences: {round(total_sentences / total_stories, 2)}")
     print(f"Average word length: {round(sum(total_word_lengths) / len(total_word_lengths), 2)}")
-    print(f"Total words: {len(all_words)}")
-    print(f"Total unique words: {len(set(all_words))}")
+    print(f"Average sentence length: {round(sum(total_sentence_lengths) / len(total_sentence_lengths), 2)}")
     print(f"Average ratio of unique:non-unique words per story: {round(unique_word_ratio / total_stories, 2)}")
     print(f'Completed in {round(time.time() - start, 2)} seconds')
-    plot_word_distribution(all_words, dir)
+    plot_word_distribution([word for word in all_words if word not in stopwords.words("english")], dir)
 
 
 ''' 
@@ -178,14 +188,14 @@ def make_gpt_api_call(system_prompt: str, user_prompt: str, model='gpt-4o'):
 
 
 if __name__ == '__main__':
-    calculate_corpus_statistics('data/human books')
+    calculate_corpus_statistics('data/Tandem_Data')
 
     ivo_path = 'data\\Tandem_Data\\0a9c05f0-d630-403b-a257-7a7e67452c24.json'
     astronaut_path = 'data\\Tandem_Data\\0a774cd2-ee78-4861-a33e-1a9c2f3cfed4 (1).json'
 
     astronaut_story = unpack_story(astronaut_path)
     user_prompt = generate_user_prompt(astronaut_story)
-    # print(user_prompt)
 
+    # print(user_prompt)
     # gpt_response = make_gpt_api_call(system_prompt_3, user_prompt)
     # print(gpt_response)
