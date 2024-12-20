@@ -1,31 +1,13 @@
 import json
 import os
 import time
-import nltk
-import matplotlib.pyplot as plt
+from plotting import plot_reading_age_stats
 from nltk.tokenize import word_tokenize, sent_tokenize
-from nltk.corpus import stopwords
-from collections import Counter
 from api_key import API_KEY
 from openai import OpenAI
 from tqdm import tqdm
 from prompts import system_prompt_3
-nltk.download('stopwords')
-nltk.download('punkt_tab')
 
-
-# TODO
-# investigate cases of tandem pages = []
-# BIN STATISTICS BY AGE for tandem data
-# remove all_words calculations
-
-# investigate Direct Preference Optimisation (DPO) and OPPO
-# get ages for human stories (by prompting a separate LLM or web scraping)
-# lemmatise and stem words for distribution?
-# look at bad stories
-# look at asking the LLM to **improve** the story
-# provide textual rating scales for the AI: /7, /5 /10 becomes Likert (agree, disagree, ...)
-# tweak rating criteria
 
 ''' 
 Unpacks an individual story and returns a tuple: (story prompt, title, story, reading level).
@@ -40,8 +22,6 @@ def unpack_story(path: os.PathLike):
         story = ' '.join(line['text'] for line in data['pages'])
         return "human story", "title", story, "reading age"
 
-    # unpack llm story
-    # separate out the story prompt if it exists
     # 'generated_prompts' format
     if 'generated_prompts' in data and data['generated_prompts']:
         prompt = data['generated_prompts'][0]['prompt']
@@ -53,7 +33,6 @@ def unpack_story(path: os.PathLike):
     else:
         story_prompt = 'No prompt available'
 
-    # separate out the story and story metadata
     # 'storyout' format
     if 'storyout' in data and data['storyout']:
         story_data = data['storyout']
@@ -89,25 +68,24 @@ def unpack_story(path: os.PathLike):
 def calculate_corpus_statistics(dir: os.PathLike):
     print(f'Processing all stories in {dir}')
     start = time.time()
+
     total_sentences = 0
     total_words = 0
     total_stories = 0
     unique_word_ratio = 0
     total_word_lengths = []
     total_sentence_lengths = []
-    all_words = []
 
     files = os.listdir(dir)
     for file in tqdm(files, desc="Processing stories"):
-        #print(file)
-
+ 
         # skip dev files
         if file[:3] == 'dev':
             continue
 
         unpacked_story = unpack_story(os.path.join(dir, file))
 
-        # only process non None stories
+        # skip null files
         if not unpacked_story:
             continue
 
@@ -130,7 +108,6 @@ def calculate_corpus_statistics(dir: os.PathLike):
         total_sentences += len(sentences)
         total_word_lengths += [len(word) for word in tokenized_words]
         total_sentence_lengths += [len(sentence.split()) for sentence in sentences]
-        all_words += tokenized_words
 
         # ratio of unique:non-unique words
         unique_word_ratio += len(set(tokenized_words)) / len(tokenized_words)
@@ -142,21 +119,8 @@ def calculate_corpus_statistics(dir: os.PathLike):
     print(f"Average sentence length: {round(sum(total_sentence_lengths) / len(total_sentence_lengths), 2)}")
     print(f"Average ratio of unique:non-unique words per story: {round(unique_word_ratio / total_stories, 2)}")
     print(f'Completed in {round(time.time() - start, 2)} seconds')
-    plot_word_distribution([word for word in all_words if word not in stopwords.words("english")], dir)
 
 
-''' 
-Plots zipf's law word distribution for top n words. 
-Takes input words = [(word, count), ...] e.g. [("like", 10), ("hello", 9), ...]
-'''
-def plot_word_distribution(words, title, n=50):
-    word_distribution = Counter(words).most_common(n)
-    plt.bar(range(n), [w for f, w in word_distribution], align='center')
-    plt.xticks(range(n), [f for f, w in word_distribution], rotation=90)
-    plt.ylabel("Number of occurences")
-    plt.xlabel("Word")
-    plt.title(f"Top {n} most frequently occuring words in {title} corpus")
-    plt.show()
 
 
 ''' generate the user prompt, i.e. format the story rating task '''
@@ -189,12 +153,13 @@ def make_gpt_api_call(system_prompt: str, user_prompt: str, model='gpt-4o'):
 
 if __name__ == '__main__':
     calculate_corpus_statistics('data/Tandem_Data')
+    plot_reading_age_stats("reading_age_statistics.txt")
 
-    ivo_path = 'data\\Tandem_Data\\0a9c05f0-d630-403b-a257-7a7e67452c24.json'
-    astronaut_path = 'data\\Tandem_Data\\0a774cd2-ee78-4861-a33e-1a9c2f3cfed4 (1).json'
+    # ivo_path = 'data\\Tandem_Data\\0a9c05f0-d630-403b-a257-7a7e67452c24.json'
+    # astronaut_path = 'data\\Tandem_Data\\0a774cd2-ee78-4861-a33e-1a9c2f3cfed4 (1).json'
 
-    astronaut_story = unpack_story(astronaut_path)
-    user_prompt = generate_user_prompt(astronaut_story)
+    # astronaut_story = unpack_story(astronaut_path)
+    # user_prompt = generate_user_prompt(astronaut_story)
 
     # print(user_prompt)
     # gpt_response = make_gpt_api_call(system_prompt_3, user_prompt)
