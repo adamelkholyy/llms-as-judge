@@ -48,7 +48,6 @@ def plot_reading_age_stats(path):
     plt.tight_layout()
     plt.show()
 
-
     
 if __name__ == '__main__':
     plot_reading_age_stats("reading_age_statistics.txt")

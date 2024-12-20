@@ -152,7 +152,7 @@ def make_gpt_api_call(system_prompt: str, user_prompt: str, model='gpt-4o'):
 
 
 if __name__ == '__main__':
-    calculate_corpus_statistics('data/Tandem_Data')
+    # calculate_corpus_statistics('data/Tandem_Data')
     plot_reading_age_stats("reading_age_statistics.txt")
 
     # ivo_path = 'data\\Tandem_Data\\0a9c05f0-d630-403b-a257-7a7e67452c24.json'
